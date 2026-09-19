@@ -358,10 +358,45 @@ local function SyncAll() for _, fn in pairs(SyncHooks) do pcall(fn) end end
 -- CONFIG
 -- ============================================================
 local function serializeValue(v)
+    local isEnum = false
+    local enumName, enumTypeName
     if typeof and typeof(v) == "EnumItem" then
-        local enumTypeName = tostring(v.EnumType)
-        enumTypeName = enumTypeName:gsub("^Enum%.", "")
-        return "__enum:" .. enumTypeName .. ":" .. v.Name
+        isEnum = true
+        enumName = v.Name
+        local ok, et = pcall(function() return tostring(v.EnumType) end)
+        enumTypeName = ok and et or "Unknown"
+    else
+        -- fallback для эксплойтов без typeof
+        local ok1, hasEnumType = pcall(function() return v.EnumType and v.Name end)
+        if ok1 and hasEnumType then
+            local ok2, et = pcall(function() return tostring(v.EnumType) end)
+            local ok3, nm = pcall(function() return v.Name end)
+            if ok2 and ok3 and nm then
+                isEnum = true
+                enumTypeName = et
+                enumName = nm
+            end
+        end
+        if not isEnum and type(v) == "userdata" then
+            local s = tostring(v)
+            if s:find("Enum%.") then
+                -- последний шанс: пробуем распарсить tostring
+                local et, nm = s:match("Enum%.([^%.]+)%.([^%s]+)")
+                if et and nm then
+                    isEnum = true
+                    enumTypeName = et
+                    enumName = nm
+                end
+            end
+        end
+    end
+    if isEnum and enumName and enumTypeName then
+        enumTypeName = tostring(enumTypeName):gsub("^Enum%.", "")
+        return "__enum:" .. enumTypeName .. ":" .. tostring(enumName)
+    end
+    -- защита от несериализуемых типов (function, userdata)
+    if type(v) == "function" or type(v) == "userdata" then
+        return tostring(v)
     end
     return v
 end
@@ -372,6 +407,9 @@ local function deserializeValue(v)
             local clean = enumType:gsub("^Enum%.", "")
             local ok, enum = pcall(function() return Enum[clean][name] end)
             if ok and enum then return enum end
+            -- пробуем как UserInputType/KeyCode напрямую
+            local ok2, enum2 = pcall(function() return Enum[clean][name] end)
+            if ok2 and enum2 then return enum2 end
         end
     end
     return v
@@ -384,17 +422,42 @@ local KEYBIND_FIELDS = {
 }
 
 local function SaveConfig()
-    if not writefile then return false end
+    if not writefile then
+        warn("[LUNACI] writefile not available")
+        return false
+    end
     local data = {}
     for k, v in pairs(Settings) do
-        data[k] = serializeValue(v)
+        local ok, sv = pcall(serializeValue, v)
+        if ok then
+            data[k] = sv
+        else
+            data[k] = tostring(v)
+        end
     end
     local ok, enc = pcall(HttpService.JSONEncode, HttpService, data)
-    if ok then
-        WriteFile(Settings.ConfigName, enc)
-        return true
+    if not ok then
+        -- пробуем упростить: все в строки
+        local fallback = {}
+        for k, v in pairs(data) do
+            if type(v) == "string" or type(v) == "number" or type(v) == "boolean" then
+                fallback[k] = v
+            else
+                fallback[k] = tostring(v)
+            end
+        end
+        ok, enc = pcall(HttpService.JSONEncode, HttpService, fallback)
+        if not ok then
+            warn("[LUNACI] JSONEncode failed: " .. tostring(enc))
+            return false
+        end
     end
-    return false
+    local wok, werr = pcall(WriteFile, Settings.ConfigName, enc)
+    if not wok then
+        warn("[LUNACI] WriteFile failed: " .. tostring(werr))
+        return false
+    end
+    return true
 end
 
 local function LoadConfig()
@@ -1400,18 +1463,15 @@ do
     end
     local function ApplyToHumanoid(hum)
         if not hum then return end
-        local idStr = CleanId()
-        if idStr == "" then return end
-        -- пробуем аватар, если кастомный режим — сразу кастом
-        local raw = tostring(Settings.ModelID or ""):lower()
-        if raw:find("rbxassetid") or tonumber(idStr) and #idStr > 8 then
-            -- считаем кастомной моделью если id большой
-            local char = hum.Parent
-            if char and ApplyCustomModelToCharacter(char, idStr) then return end
-        end
-        if not ApplyAvatarToHumanoid(hum) then
-            local char = hum.Parent
-            if char then ApplyCustomModelToCharacter(char, idStr) end
+        -- сначала пробуем как аватар (UserId/OutfitId)
+        if ApplyAvatarToHumanoid(hum) then return end
+        -- если аватар не сработал — пробуем как кастомную 3D модель
+        local char = hum.Parent
+        if char then
+            local idStr = CleanId()
+            if idStr ~= "" then
+                ApplyCustomModelToCharacter(char, idStr)
+            end
         end
     end
     local function RestoreHumanoidFull(hum)
