@@ -7,6 +7,7 @@ local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
+local InsertService = game:GetService("InsertService")
 
 local lplr = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -1277,13 +1278,19 @@ LunaConnect(ResetBtn.MouseButton1Click, function()
     Notify("Models", "Сброшено — оригиналы возвращены", "warn", 2)
 end)
 
--- Model Engine (local only)
+-- Model Engine (local only) — аватар + кастомная 3D модель
 do
     local OriginalDescs = {}
+    local CustomClones = {}
+    local HiddenCache = {}
     local function CleanId()
         local raw = tostring(Settings.ModelID or "")
         local num = raw:match("%d+")
         return num or ""
+    end
+    local function IsCustomMode()
+        local raw = tostring(Settings.ModelID or ""):lower()
+        return raw:find("rbxassetid") ~= nil or raw:find("model") ~= nil or Settings.ModelID:len() > 9
     end
     local function SaveOriginal(hum)
         if not hum or OriginalDescs[hum] then return end
@@ -1294,12 +1301,11 @@ do
             OriginalDescs[hum] = "empty"
         end
     end
-    local function ApplyToHumanoid(hum)
-        if not hum then return end
+    local function ApplyAvatarToHumanoid(hum)
         local idStr = CleanId()
-        if idStr == "" then return end
+        if idStr == "" then return false end
         local idNum = tonumber(idStr)
-        if not idNum then return end
+        if not idNum then return false end
         SaveOriginal(hum)
         local ok, newDesc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(idNum) end)
         if not ok or not newDesc then
@@ -1307,7 +1313,65 @@ do
         end
         if ok and newDesc then
             pcall(function() hum:ApplyDescription(newDesc) end)
+            return true
         end
+        return false
+    end
+    local function ApplyCustomModelToCharacter(char, idNum)
+        if not char then return false end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+        if CustomClones[char] then
+            pcall(function() CustomClones[char]:Destroy() end)
+            CustomClones[char] = nil
+        end
+        local ok, model = pcall(function()
+            local m = game:GetObjects("rbxassetid://" .. tostring(idNum))[1]
+            if m then return m end
+            return InsertService:LoadAsset(tonumber(idNum))
+        end)
+        if not ok or not model then return false end
+        local toClone = model:FindFirstChildWhichIsA("Model") or model
+        if toClone:IsA("Model") and model:IsA("Model") == false then toClone = model end
+        local clone = toClone:Clone()
+        clone.Name = "LunaciCustomModel"
+        -- убрать Humanoid из клона
+        for _, d in pairs(clone:GetDescendants()) do
+            if d:IsA("Humanoid") then d:Destroy() end
+        end
+        -- скрыть оригинал
+        HiddenCache[char] = {}
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("BasePart") and v ~= hrp then
+                HiddenCache[char][v] = v.Transparency
+                v.Transparency = 1
+            elseif v:IsA("Decal") or v:IsA("Texture") then
+                HiddenCache[char][v] = v.Transparency
+                v.Transparency = 1
+            end
+            if v:IsA("Accessory") then v.Handle.Transparency = 1 end
+        end
+        clone.Parent = char
+        pcall(function()
+            if clone.PrimaryPart then
+                clone:SetPrimaryPartCFrame(hrp.CFrame)
+                local weld = Instance.new("WeldConstraint")
+                weld.Part0 = hrp
+                weld.Part1 = clone.PrimaryPart
+                weld.Parent = clone.PrimaryPart
+            else
+                local part = clone:FindFirstChildWhichIsA("BasePart")
+                if part then
+                    part.CFrame = hrp.CFrame
+                    local weld = Instance.new("WeldConstraint")
+                    weld.Part0 = hrp
+                    weld.Part1 = part
+                    weld.Parent = part
+                end
+            end
+        end)
+        CustomClones[char] = clone
+        return true
     end
     local function RestoreHumanoid(hum)
         local orig = OriginalDescs[hum]
@@ -1316,21 +1380,66 @@ do
         end
         OriginalDescs[hum] = nil
     end
+    local function RestoreCustom(char)
+        if CustomClones[char] then
+            pcall(function() CustomClones[char]:Destroy() end)
+            CustomClones[char] = nil
+        end
+        if HiddenCache[char] then
+            for obj, trans in pairs(HiddenCache[char]) do
+                pcall(function() obj.Transparency = trans end)
+            end
+            HiddenCache[char] = nil
+        end
+        -- показать аксессуары
+        for _, v in pairs(char:GetDescendants()) do
+            if v:IsA("Accessory") and v:FindFirstChild("Handle") then
+                pcall(function() v.Handle.Transparency = 0 end)
+            end
+        end
+    end
+    local function ApplyToHumanoid(hum)
+        if not hum then return end
+        local idStr = CleanId()
+        if idStr == "" then return end
+        -- пробуем аватар, если кастомный режим — сразу кастом
+        local raw = tostring(Settings.ModelID or ""):lower()
+        if raw:find("rbxassetid") or tonumber(idStr) and #idStr > 8 then
+            -- считаем кастомной моделью если id большой
+            local char = hum.Parent
+            if char and ApplyCustomModelToCharacter(char, idStr) then return end
+        end
+        if not ApplyAvatarToHumanoid(hum) then
+            local char = hum.Parent
+            if char then ApplyCustomModelToCharacter(char, idStr) end
+        end
+    end
+    local function RestoreHumanoidFull(hum)
+        RestoreHumanoid(hum)
+        local char = hum and hum.Parent
+        if char then RestoreCustom(char) end
+    end
     local function ApplyToCharacter(char)
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hum then ApplyToHumanoid(hum) end
     end
     local function RestoreCharacter(char)
         local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then RestoreHumanoid(hum) end
+        if hum then RestoreHumanoidFull(hum) end
+        RestoreCustom(char)
     end
-    local lastSelf = false
-    local lastAll = false
+    local lastSelf = Settings.ModelSelf
+    local lastAll = Settings.ModelAll
+    -- автосейв при тоггле
+    local function CheckSave()
+        pcall(SaveConfig)
+    end
     LunaConnect(RunService.Heartbeat, function()
         if not IsLoggedIn then return end
         local curSelf = Settings.ModelSelf
         local curAll = Settings.ModelAll
         if curSelf ~= lastSelf then
+            CheckSave()
             if curSelf then
                 local char = lplr.Character
                 if char then ApplyToCharacter(char) end
@@ -1343,6 +1452,7 @@ do
             lastSelf = curSelf
         end
         if curAll ~= lastAll then
+            CheckSave()
             if curAll then
                 for _, p in pairs(Players:GetPlayers()) do
                     if p.Character then ApplyToCharacter(p.Character) end
@@ -2197,6 +2307,7 @@ LunaConnect(UIS.InputBegan, function(k, gpe)
         capturingKey = nil
         rebuildTokenMap()
         SyncAll()
+        pcall(SaveConfig)
         SFX.Play("Message")
         Notify("Keybind set", oldName .. " → " .. tostring(newVal.Name), "success", 2)
         return
