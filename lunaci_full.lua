@@ -1,4 +1,4 @@
--- [[ LUNACI PREMIUM V26.6 | LIQUID GLASS + NIGHT SKY + CHAMS + SFX + KEYBINDS + NOTIFICATIONS + AVATAR ]]
+-- [[ LUNACI PREMIUM V26.6.1 | LIQUID GLASS + NIGHT SKY + CHAMS + SFX + KEYBINDS + NOTIFICATIONS + AVATAR + MODELS ]]
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
@@ -286,6 +286,10 @@ local DefaultSettings = {
     KeyESP = Enum.KeyCode.E,
     KeyChams = Enum.KeyCode.H,
     KeyNightSky = Enum.KeyCode.J,
+
+    ModelID = "107043317637075",
+    ModelSelf = false,
+    ModelAll = false,
 }
 
 local Settings = {}
@@ -353,15 +357,20 @@ local function SyncAll() for _, fn in pairs(SyncHooks) do pcall(fn) end end
 -- CONFIG
 -- ============================================================
 local function serializeValue(v)
-    if typeof and typeof(v) == "EnumItem" then return "__enum:" .. tostring(v.EnumType) .. ":" .. v.Name end
+    if typeof and typeof(v) == "EnumItem" then
+        local enumTypeName = tostring(v.EnumType)
+        enumTypeName = enumTypeName:gsub("^Enum%.", "")
+        return "__enum:" .. enumTypeName .. ":" .. v.Name
+    end
     return v
 end
 local function deserializeValue(v)
     if type(v) == "string" and v:sub(1, 7) == "__enum:" then
         local _, enumType, name = v:find("^__enum:(.+)%:(.+)$")
         if enumType and name then
-            local ok, enum = pcall(function() return Enum[enumType][name] end)
-            if ok then return enum end
+            local clean = enumType:gsub("^Enum%.", "")
+            local ok, enum = pcall(function() return Enum[clean][name] end)
+            if ok and enum then return enum end
         end
     end
     return v
@@ -592,7 +601,7 @@ local BrandSub = Instance.new("TextLabel", Sidebar)
 BrandSub.Size = UDim2.new(1, -70, 0, 14)
 BrandSub.Position = UDim2.new(0, 20, 0, 48)
 BrandSub.BackgroundTransparency = 1
-BrandSub.Text = "PREMIUM V26.6"
+BrandSub.Text = "PREMIUM V26.6.1"
 BrandSub.Font = Enum.Font.Gotham
 BrandSub.TextColor3 = TextMute
 BrandSub.TextSize = 10
@@ -692,6 +701,7 @@ local pages = {
     Rage = CreatePage(),
     Players = CreatePage(),
     Movement = CreatePage(),
+    Models = CreatePage(),
     Keybinds = CreatePage(),
     Config = CreatePage(),
     Misc = CreatePage(),
@@ -734,6 +744,7 @@ local SelAim        = AddTab("Aim", "Aim")
 local SelRage       = AddTab("Rage", "Rage")
 local SelPlayers    = AddTab("Players", "Players")
 local SelMovement   = AddTab("Movement", "Movement")
+local SelModels     = AddTab("Models", "Models")
 local SelKeybinds   = AddTab("Keybinds", "Keybinds")
 local SelConfig     = AddTab("Config", "Config")
 local SelMisc       = AddTab("Misc", "Misc")
@@ -973,6 +984,43 @@ local function AddKeybind(parent, label, key)
     render()
 end
 
+local function AddTextbox(parent, label, key, placeholder)
+    local row = Instance.new("Frame", parent)
+    row.Size = UDim2.new(1, 0, 0, 30)
+    row.BackgroundTransparency = 1
+    local lbl = Instance.new("TextLabel", row)
+    lbl.Size = UDim2.new(0.35, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = label
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextColor3 = TextDim
+    lbl.TextSize = 12
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    local box = Instance.new("TextBox", row)
+    box.Size = UDim2.new(0.65, 0, 0, 26)
+    box.Position = UDim2.new(0.35, 0, 0.5, -13)
+    box.BackgroundColor3 = BgRow
+    box.Text = tostring(Settings[key] or "")
+    box.PlaceholderText = placeholder or ""
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 12
+    box.TextColor3 = TextMain
+    box.ClearTextOnFocus = false
+    Corner(box, 5)
+    Instance.new("UIPadding", box).PaddingLeft = UDim.new(0, 8)
+    local function refresh() box.Text = tostring(Settings[key] or "") end
+    OnSync(refresh)
+    LunaConnect(box.FocusLost, function(enter)
+        if enter then
+            Settings[key] = box.Text:gsub("%s+", "")
+            SFX.Play("Click")
+            Notify("Model ID", "Установлен: " .. Settings[key], "success", 2)
+            SaveConfig()
+        end
+    end)
+    return box
+end
+
 -- ============================================================
 -- KEYBIND ROUTER
 -- ============================================================
@@ -1024,6 +1072,7 @@ rebuildTokenMap()
 -- PAGE: TRIGGERBOT
 -- ============================================================
 AddHeader(pages.Triggerbot, "Triggerbot")
+do
 local g1 = AddGroup(pages.Triggerbot, "Triggerbot")
 AddToggle(g1, "Enabled", "TriggerBot")
 AddToggle(g1, "Team Check", "TeamCheck")
@@ -1039,9 +1088,11 @@ AddSlider(g1b, "After shot delay", "TraceDist", 50, 500, 0)
 AddSlider(g1b, "Humanize %", "NoRecoilPower", 0, 100, 0)
 
 -- ============================================================
+end
 -- PAGE: AIM
 -- ============================================================
 AddHeader(pages.Aim, "Aimbot")
+do
 
 local a0 = AddGroup(pages.Aim, "Auto Aim (no RMB)")
 AddToggle(a0, "Auto Aim (always on)", "AutoAim")
@@ -1076,9 +1127,11 @@ AddSlider(a3, "Trace Length", "TraceDist", 50, 500, 0)
 AddSlider(a3, "Trace Duration", "TraceDur", 0.1, 0.8, 2)
 
 -- ============================================================
+end
 -- PAGE: RAGE
 -- ============================================================
 AddHeader(pages.Rage, "Rage")
+do
 local r1 = AddGroup(pages.Rage, "Rage features")
 AddToggle(r1, "Team Check", "TeamCheck")
 AddToggle(r1, "Rage Aim", "RageBot")
@@ -1087,9 +1140,11 @@ AddToggle(r1, "Silent Aim", "SilentAim")
 AddToggle(r1, "Auto Fire", "AutoFire")
 
 -- ============================================================
+end
 -- PAGE: PLAYERS
 -- ============================================================
 AddHeader(pages.Players, "Players")
+do
 
 local p1 = AddGroup(pages.Players, "ESP")
 AddToggle(p1, "Team Check", "TeamCheck")
@@ -1143,9 +1198,11 @@ AddToggle(p6, "Remove Impact", "RemImpact")
 AddToggle(p6, "Remove Explosion", "RemExplosion")
 
 -- ============================================================
+end
 -- PAGE: MOVEMENT
 -- ============================================================
 AddHeader(pages.Movement, "Movement")
+do
 local m1 = AddGroup(pages.Movement, "Stats")
 AddSlider(m1, "Walkspeed", "Speed", 10, 200, 0)
 AddSlider(m1, "Jump Power", "Jump", 40, 140, 0)
@@ -1159,9 +1216,175 @@ AddSlider(m2, "Bhop Jump Speed", "BhopSpeed", 10, 200, 0)
 AddToggle(m2, "Move Before Round", "MoveBeforeRound")
 
 -- ============================================================
+end
+-- PAGE: MODELS (LOCAL)
+-- ============================================================
+AddHeader(pages.Models, "Models — локальная замена")
+do
+
+local md1 = AddGroup(pages.Models, "ID модели / аватара")
+AddTextbox(md1, "Model/User ID", "ModelID", "107043317637075 или 1")
+do
+    local hint = Instance.new("TextLabel", md1)
+    hint.Size = UDim2.new(1, 0, 0, 34)
+    hint.BackgroundTransparency = 1
+    hint.Text = "Вставь UserId (аватар) или OutfitId. Применится локально — видят только ты. Отключи чтобы вернуть."
+    hint.Font = Enum.Font.Gotham
+    hint.TextColor3 = TextMute
+    hint.TextSize = 11
+    hint.TextWrapped = true
+    hint.TextXAlignment = Enum.TextXAlignment.Left
+end
+
+local md2 = AddGroup(pages.Models, "Применение")
+AddToggle(md2, "Только себе", "ModelSelf")
+AddToggle(md2, "Всем игрокам", "ModelAll")
+local ModelStatus = Instance.new("TextLabel", md2)
+ModelStatus.Size = UDim2.new(1, 0, 0, 18)
+ModelStatus.BackgroundTransparency = 1
+ModelStatus.Font = Enum.Font.Gotham
+ModelStatus.TextSize = 11
+ModelStatus.TextColor3 = TextMute
+ModelStatus.TextXAlignment = Enum.TextXAlignment.Left
+ModelStatus.Text = "Статус: выкл"
+OnSync(function()
+    local s = Settings.ModelSelf and "себе" or ""
+    local a = Settings.ModelAll and "всем" or ""
+    local m = s .. (s~="" and a~="" and " + " or "") .. a
+    ModelStatus.Text = (m=="" and "Статус: выкл" or "Статус: " .. m .. " → " .. tostring(Settings.ModelID))
+end)
+
+local mdBtnRow = Instance.new("Frame", md2)
+mdBtnRow.Size = UDim2.new(1, 0, 0, 30)
+mdBtnRow.BackgroundTransparency = 1
+local mdBtnLL = Instance.new("UIListLayout", mdBtnRow)
+mdBtnLL.FillDirection = Enum.FillDirection.Horizontal
+mdBtnLL.Padding = UDim.new(0, 8)
+
+local ApplyNowBtn = AddButton(md2, "▶ Применить сейчас")
+LunaConnect(ApplyNowBtn.MouseButton1Click, function()
+    Settings.ModelSelf = true
+    SaveConfig()
+    SyncAll()
+    Notify("Models", "Применено к себе: " .. tostring(Settings.ModelID), "success", 2)
+end)
+local ResetBtn = AddButton(md2, "↩ Сбросить всех")
+LunaConnect(ResetBtn.MouseButton1Click, function()
+    Settings.ModelSelf = false
+    Settings.ModelAll = false
+    SaveConfig()
+    SyncAll()
+    Notify("Models", "Сброшено — оригиналы возвращены", "warn", 2)
+end)
+
+-- Model Engine (local only)
+do
+    local OriginalDescs = {}
+    local function CleanId()
+        local raw = tostring(Settings.ModelID or "")
+        local num = raw:match("%d+")
+        return num or ""
+    end
+    local function SaveOriginal(hum)
+        if not hum or OriginalDescs[hum] then return end
+        local ok, desc = pcall(function() return hum:GetAppliedDescription() end)
+        if ok and desc then
+            OriginalDescs[hum] = desc:Clone()
+        else
+            OriginalDescs[hum] = "empty"
+        end
+    end
+    local function ApplyToHumanoid(hum)
+        if not hum then return end
+        local idStr = CleanId()
+        if idStr == "" then return end
+        local idNum = tonumber(idStr)
+        if not idNum then return end
+        SaveOriginal(hum)
+        local ok, newDesc = pcall(function() return Players:GetHumanoidDescriptionFromUserId(idNum) end)
+        if not ok or not newDesc then
+            ok, newDesc = pcall(function() return Players:GetHumanoidDescriptionFromOutfitId(idNum) end)
+        end
+        if ok and newDesc then
+            pcall(function() hum:ApplyDescription(newDesc) end)
+        end
+    end
+    local function RestoreHumanoid(hum)
+        local orig = OriginalDescs[hum]
+        if orig and orig ~= "empty" then
+            pcall(function() hum:ApplyDescription(orig) end)
+        end
+        OriginalDescs[hum] = nil
+    end
+    local function ApplyToCharacter(char)
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then ApplyToHumanoid(hum) end
+    end
+    local function RestoreCharacter(char)
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then RestoreHumanoid(hum) end
+    end
+    local lastSelf = false
+    local lastAll = false
+    LunaConnect(RunService.Heartbeat, function()
+        if not IsLoggedIn then return end
+        local curSelf = Settings.ModelSelf
+        local curAll = Settings.ModelAll
+        if curSelf ~= lastSelf then
+            if curSelf then
+                local char = lplr.Character
+                if char then ApplyToCharacter(char) end
+                Notify("Models", "Модель себе: ON → " .. CleanId(), "success", 2)
+            else
+                local char = lplr.Character
+                if char then RestoreCharacter(char) end
+                Notify("Models", "Модель себе: OFF", "warn", 2)
+            end
+            lastSelf = curSelf
+        end
+        if curAll ~= lastAll then
+            if curAll then
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p.Character then ApplyToCharacter(p.Character) end
+                end
+                Notify("Models", "Модель всем: ON", "success", 2)
+            else
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p.Character then RestoreCharacter(p.Character) end
+                end
+                Notify("Models", "Модель всем: OFF — возвращено", "warn", 2)
+            end
+            lastAll = curAll
+        end
+    end)
+    LunaConnect(Players.PlayerAdded, function(p)
+        LunaConnect(p.CharacterAdded, function(char)
+            task.wait(1)
+            if Settings.ModelAll then ApplyToCharacter(char) end
+            if p == lplr and Settings.ModelSelf then ApplyToCharacter(char) end
+        end)
+    end)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p.Character then
+            LunaConnect(p.CharacterAdded, function(char)
+                task.wait(1)
+                if Settings.ModelAll then ApplyToCharacter(char) end
+                if p == lplr and Settings.ModelSelf then ApplyToCharacter(char) end
+            end)
+        end
+    end
+    LunaConnect(lplr.CharacterAdded, function(char)
+        task.wait(1)
+        if Settings.ModelSelf or Settings.ModelAll then ApplyToCharacter(char) end
+    end)
+end
+
+-- ============================================================
+end
 -- PAGE: KEYBINDS
 -- ============================================================
 AddHeader(pages.Keybinds, "Keybinds")
+do
 local kb1 = AddGroup(pages.Keybinds, "Menu")
 AddKeybind(kb1, "Open / close menu", "MenuKey")
 AddKeybind(kb1, "Aim hold", "AimKey")
@@ -1181,9 +1404,11 @@ AddKeybind(kb3, "Toggle Chams", "KeyChams")
 AddKeybind(kb3, "Toggle Night Sky", "KeyNightSky")
 
 -- ============================================================
+end
 -- PAGE: CONFIG
 -- ============================================================
 AddHeader(pages.Config, "Config")
+do
 
 local cf1 = AddGroup(pages.Config, "Theme")
 local themeRow = Instance.new("Frame", cf1)
@@ -1247,7 +1472,7 @@ LunaConnect(DelKeyBtn.MouseButton1Click, function()
             Main.Visible = true; MenuOpen = true; SelectTab("Triggerbot")
             TweenService:Create(MainScale, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
             SFX.Play("Open")
-            Notify("Lunaci V26.6", "Ключ активен (" .. tostring(info.label) .. " | " .. tostring(info.days_left) .. " дн.)", "success", 4)
+            Notify("Lunaci V26.6.1", "Ключ активен (" .. tostring(info.label) .. " | " .. tostring(info.days_left) .. " дн.)", "success", 4)
         end)
     end)
 end)
@@ -1351,9 +1576,11 @@ LunaConnect(UnloadBtn.MouseButton1Click, function()
 end)
 
 -- ============================================================
+end
 -- PAGE: MISC
 -- ============================================================
 AddHeader(pages.Misc, "Misc")
+do
 
 local mi1 = AddGroup(pages.Misc, "Self")
 AddToggle(mi1, "Chams On Self", "SelfChams")
@@ -1382,6 +1609,7 @@ hintLbl.TextYAlignment = Enum.TextYAlignment.Top
 hintLbl.TextWrapped = true
 
 -- ============================================================
+end
 -- GLASS MODE
 -- ============================================================
 local function ApplyGlass()
@@ -1650,7 +1878,7 @@ local function BootLunaci(keyInfo)
         SFX.Play("Open")
         local label = keyInfo and keyInfo.label or ""
         local days = keyInfo and keyInfo.days_left or "?"
-        Notify("Lunaci V26.6", "Ключ активен ("..tostring(label).." | "..tostring(days).." дн.) Tab - меню, RMB - aim", "success", 4)
+        Notify("Lunaci V26.6.1", "Ключ активен ("..tostring(label).." | "..tostring(days).." дн.) Tab - меню, RMB - aim", "success", 4)
     end)
 end
 
@@ -2694,4 +2922,4 @@ end)
 -- ============================================================
 -- BOOT LOG
 -- ============================================================
-print("[LUNACI] V26.6 loaded. Avatar + night sky + config keybinds ready.")
+print("[LUNACI] V26.6.1 loaded. Avatar + night sky + config keybinds ready.")
