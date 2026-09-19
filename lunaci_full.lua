@@ -1681,6 +1681,7 @@ end
 -- ============================================================
 -- ESP
 -- ============================================================
+do
 local esp = {}
 local function GiveESP(p)
     if not p.Character then return end
@@ -1800,6 +1801,7 @@ local function EnsureESP()
             if not d then GiveESP(p) end
         end
     end
+end
 end
 
 -- ============================================================
@@ -2016,6 +2018,7 @@ end)
 -- ============================================================
 -- SHOT TRACERS
 -- ============================================================
+do
 local ActiveTracers = {}
 local TracerPool = {}
 local PoolCursor = 0
@@ -2111,6 +2114,7 @@ LunaConnect(UIS.InputBegan, function(k, gpe)
         fireShot()
     end
 end)
+end
 
 -- ============================================================
 -- findWeapon
@@ -2345,6 +2349,7 @@ end)
 -- ============================================================
 -- GRENADE TRAJECTORY
 -- ============================================================
+do
 local Traj = {}
 for i = 1, 24 do
     Traj[i] = Drawing.new("Line")
@@ -2427,10 +2432,12 @@ LunaConnect(RunService.RenderStepped, function()
         TrajRadius2.Visible = true
     end
 end)
+end
 
 -- ============================================================
 -- CHAMS ENGINE
 -- ============================================================
+do
 local orbHud = {}
 
 local function playerChamMode()
@@ -2670,6 +2677,7 @@ LunaConnect(RunService.RenderStepped, function()
         end
     end
 end)
+end
 
 -- ============================================================
 -- GC
